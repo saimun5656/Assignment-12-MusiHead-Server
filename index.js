@@ -75,6 +75,17 @@ async function run() {
                 res.status(403).send({ error: true, message: 'user already exist' })
             }
         })
+        app.patch('/users/admin/:id', varifyJwt, varifyInstructor, async (req, res) => {
+            const id = req.params.id;
+            const filter = { _id: new ObjectId(id) };
+            const update = {
+                $set: {
+                    role: 'admin'
+                }
+            }
+            const result = await database.collection('users').updateOne(filter, update);
+            res.send(result);
+        })
         app.patch('/users/instructors/:id', varifyJwt, varifyInstructor, async (req, res) => {
             const id = req.params.id;
             const filter = { _id: new ObjectId(id) };
