@@ -51,7 +51,17 @@ async function run() {
             const token = jwt.sign(user, process.env.TOKEN_SCR, { expiresIn: '4h' });
             res.send({ token })
         })
-        //varify Admin
+        //varify Admin and Instructor
+        const varifyAdmin = async (req, res, next) => {
+            const email = req.decoded.email
+            const filter = { email: email };
+            const user = await database.collection('users').findOne(filter);
+            console.log(email, user);
+            if (user?.role != 'admin') {
+                return res.status(403).send({ error: true, message: 'forbidden access 2' });
+            }
+            next()
+        }
         const varifyInstructor = async (req, res, next) => {
             const email = req.decoded.email
             const filter = { email: email };
@@ -62,7 +72,8 @@ async function run() {
             }
             next()
         }
-        //user apis
+
+        //user apis---------------------------------------------------------------
         app.post('/users', async (req, res) => {
             const user = req.body;
             const filter = { email: user.email }
@@ -75,7 +86,7 @@ async function run() {
                 res.status(403).send({ error: true, message: 'user already exist' })
             }
         })
-        app.patch('/users/admin/:id', varifyJwt,  async (req, res) => {
+        app.patch('/users/admin/:id', varifyJwt, varifyAdmin, async (req, res) => {
             const id = req.params.id;
             const filter = { _id: new ObjectId(id) };
             const update = {
@@ -86,7 +97,7 @@ async function run() {
             const result = await database.collection('users').updateOne(filter, update);
             res.send(result);
         })
-        app.patch('/users/instructors/:id', varifyJwt,  async (req, res) => {
+        app.patch('/users/instructors/:id', varifyJwt, varifyAdmin, async (req, res) => {
             const id = req.params.id;
             const filter = { _id: new ObjectId(id) };
             const update = {
@@ -97,6 +108,15 @@ async function run() {
             const result = await database.collection('users').updateOne(filter, update);
             res.send(result);
         })
+        app.get('/users/admin/:email', varifyJwt, async (req, res) => {
+            const email = req.params.email;
+            const filter = { email: email }
+            if (req.decoded.email != email)
+                return res.send({ instructor: false });
+            const user = await database.collection('users').findOne(filter);
+            const result = { admin: user?.role === 'admin' }
+            res.send(result)
+        })
         app.get('/users/instructors/:email', varifyJwt, async (req, res) => {
             const email = req.params.email;
             const filter = { email: email }
@@ -106,11 +126,13 @@ async function run() {
             const result = { instructor: user?.role === 'instructor' }
             res.send(result)
         })
+        
         app.get('/users', async (req,res)=>{
             const result = await database.collection('users').find().toArray()
             res.send(result)
         })
-        //classes apis
+
+        //classes apis--------------------------------------
         app.post('/classes', varifyJwt, varifyInstructor, async (req, res) => {
             const newclass = req.body;
             const result = await database.collection('classes').insertOne(newclass);
