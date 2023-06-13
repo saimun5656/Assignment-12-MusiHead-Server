@@ -1,4 +1,5 @@
 require('dotenv').config()
+const jwt = require('jsonwebtoken')
 const express = require('express');
 const cors = require('cors');
 const app = express();
@@ -30,7 +31,59 @@ async function run() {
         // Connect the client to the server	(optional starting in v4.7)
         client.connect();
         const database = client.db('musiHeadDB');
-        app.post('jwt')
+        //jwt api
+        app.post('/jwt',(req,res)=>{
+           const user = req.body;
+           const token = jwt.sign(user,process.env.TOKEN_SCR,{expiresIn:'4h'});
+           res.send({token})
+        })
+        //varify Admin
+        const varifyAdmin = async (req,res,next)=>{
+            const email = req.decoded.email
+            const filter = {email:email};
+            const user = await database.collection('users').findOne(filter);
+            console.log(email,user);
+            if (user?.role !='admin')
+            { 
+              return res.status(403).send({error:true,message:'forbidden access 2'});
+            }
+           next()
+        }
+        const varifyJwt = (req,res,next)=>{
+          const authorization = req.headers.authorization
+          if(!authorization)
+          {
+            return res.status(401).send({error:true,message:'unauthorized access'})
+          }
+          const token = authorization.split(' ')[1]
+          jwt.verify(token,process.env.TOKEN_SCR,(error,decoded)=>{
+            if(error){
+                return res.status(403).send({error:true,message:'forbidden access'})  
+            }
+            req.decoded=decoded
+            next()
+            console.log(token);
+          })
+        }
+        //user apis
+        app.post('/users',async (req,res)=>{
+            const user = req.body;
+            const filter = {email:user.email}
+            const userexist = await database.collection('users').findOne(filter)
+            if(!userexist){
+            const result =await database.collection('users').insertOne(user);
+            res.send(result)
+            }
+            else{
+                res.status(403).send({error:true,message:'user already exist'})
+            }
+        })
+        //classes apis
+        app.post('/classes', varifyJwt, async (req,res)=>{
+         const newclass = req.body;
+         console.log(newclass);
+
+        })
 
         // Send a ping to confirm a successful connection
         await client.db("admin").command({ ping: 1 });
