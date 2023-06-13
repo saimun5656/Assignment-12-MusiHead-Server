@@ -14,7 +14,7 @@ app.listen(port, () => {
 })
 
 //mongo db 
-const { MongoClient, ServerApiVersion } = require('mongodb');
+const { MongoClient, ServerApiVersion, ObjectId} = require('mongodb');
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.xlrthmr.mongodb.net/?retryWrites=true&w=majority`;
 
 // Create a MongoClient with a MongoClientOptions object to set the Stable API version
@@ -75,7 +75,7 @@ async function run() {
                 res.status(403).send({ error: true, message: 'user already exist' })
             }
         })
-        app.patch('/users/admin/:id', varifyJwt, varifyInstructor, async (req, res) => {
+        app.patch('/users/admin/:id', varifyJwt,  async (req, res) => {
             const id = req.params.id;
             const filter = { _id: new ObjectId(id) };
             const update = {
@@ -86,7 +86,7 @@ async function run() {
             const result = await database.collection('users').updateOne(filter, update);
             res.send(result);
         })
-        app.patch('/users/instructors/:id', varifyJwt, varifyInstructor, async (req, res) => {
+        app.patch('/users/instructors/:id', varifyJwt,  async (req, res) => {
             const id = req.params.id;
             const filter = { _id: new ObjectId(id) };
             const update = {
