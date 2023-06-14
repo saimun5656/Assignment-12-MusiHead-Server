@@ -157,6 +157,30 @@ async function run() {
         const result = await database.collection('classes').updateOne(filter, update);
         res.send(result);
        })
+       app.patch('/classes/deny/:id', varifyJwt, varifyAdmin, async (req, res) => {
+        const id = req.params.id;
+        const filter = { _id: new ObjectId(id) };
+        const update = {
+            $set: {
+                status: 'denied'
+
+            }
+        }
+        const result = await database.collection('classes').updateOne(filter, update);
+        res.send(result);
+       })
+       app.patch('/classes/feedback/:id', varifyJwt, varifyAdmin, async (req, res) => {
+        const id = req.params.id;
+        const feedback = req.body.feedback
+        const filter = { _id: new ObjectId(id) };
+        const update = {
+            $set: {
+                feedback: feedback
+            }
+        }
+        const result = await database.collection('classes').updateOne(filter, update);
+        res.send(result);
+       })
         // Send a ping to confirm a successful connection
         await client.db("admin").command({ ping: 1 });
         console.log("Pinged your deployment. You successfully connected to MongoDB!");
