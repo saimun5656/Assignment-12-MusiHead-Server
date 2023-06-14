@@ -56,7 +56,6 @@ async function run() {
             const email = req.decoded.email
             const filter = { email: email };
             const user = await database.collection('users').findOne(filter);
-            console.log(email, user);
             if (user?.role != 'admin') {
                 return res.status(403).send({ error: true, message: 'forbidden access 2' });
             }
@@ -66,7 +65,6 @@ async function run() {
             const email = req.decoded.email
             const filter = { email: email };
             const user = await database.collection('users').findOne(filter);
-            console.log(email, user);
             if (user?.role != 'instructor') {
                 return res.status(403).send({ error: true, message: 'forbidden access 2' });
             }
@@ -112,7 +110,7 @@ async function run() {
             const email = req.params.email;
             const filter = { email: email }
             if (req.decoded.email != email)
-                return res.send({ instructor: false });
+                return res.send({ admin: false });
             const user = await database.collection('users').findOne(filter);
             const result = { admin: user?.role === 'admin' }
             res.send(result)
@@ -146,6 +144,18 @@ async function run() {
        app.get('/classes', async(req,res)=>{
         const result = await database.collection('classes').find().toArray();
         res.send(result)
+       })
+       app.patch('/classes/approve/:id', varifyJwt, varifyAdmin, async (req, res) => {
+        const id = req.params.id;
+        const filter = { _id: new ObjectId(id) };
+        const update = {
+            $set: {
+                status: 'approved'
+
+            }
+        }
+        const result = await database.collection('classes').updateOne(filter, update);
+        res.send(result);
        })
         // Send a ping to confirm a successful connection
         await client.db("admin").command({ ping: 1 });
