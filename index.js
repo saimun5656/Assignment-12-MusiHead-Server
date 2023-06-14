@@ -129,6 +129,11 @@ async function run() {
             const result = await database.collection('users').find().toArray()
             res.send(result)
         })
+        app.get('/users/allinstructors', async (req,res)=>{
+            const filter ={role:'instructor'}
+            const result = await database.collection('users').find(filter).toArray()
+            res.send(result)
+        })
 
         //classes apis--------------------------------------
         app.post('/classes', varifyJwt, varifyInstructor, async (req, res) => {
@@ -181,6 +186,15 @@ async function run() {
         const result = await database.collection('classes').updateOne(filter, update);
         res.send(result);
        })
+
+       //Enrolemet apis
+       app.post('/classes/selected', varifyJwt,  async (req, res) => {
+        const selectedClass = req.body;
+        const result = await database.collection('selectedClasses').insertOne(selectedClass);
+        res.send(result);
+      })
+      
+
         // Send a ping to confirm a successful connection
         await client.db("admin").command({ ping: 1 });
         console.log("Pinged your deployment. You successfully connected to MongoDB!");
