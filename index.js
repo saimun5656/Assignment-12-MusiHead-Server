@@ -3,6 +3,7 @@ const jwt = require('jsonwebtoken')
 const express = require('express');
 const cors = require('cors');
 const app = express();
+const stripe = require("stripe")(process.env.STRIPE_SK);
 const port = process.env.PORT || 5000;
 app.use(express.json());
 app.use(cors());
@@ -14,7 +15,7 @@ app.listen(port, () => {
 })
 
 //mongo db 
-const { MongoClient, ServerApiVersion, ObjectId} = require('mongodb');
+const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.xlrthmr.mongodb.net/?retryWrites=true&w=majority`;
 
 // Create a MongoClient with a MongoClientOptions object to set the Stable API version
@@ -25,6 +26,8 @@ const client = new MongoClient(uri, {
         deprecationErrors: true,
     }
 });
+
+//verfy jwt---------------------------------------
 const varifyJwt = (req, res, next) => {
     const authorization = req.headers.authorization
     if (!authorization) {
@@ -37,9 +40,28 @@ const varifyJwt = (req, res, next) => {
         }
         req.decoded = decoded
         next()
-        console.log(token);
     })
 }
+//srtipe payment intent api------------------------------
+app.post("/create-payment-intent", async (req, res) => {
+    const { amount } = req.body;
+    if(!amount){
+        return res.send({errr:true})
+    }
+    // Create a PaymentIntent with the order amount and currency
+    const paymentIntent = await stripe.paymentIntents.create({
+        amount: amount * 100,
+        currency: "usd",
+        payment_method_types: ['card']
+    });
+
+    res.send({
+        clientSecret: paymentIntent.client_secret,
+    });
+});
+
+
+
 async function run() {
     try {
         // Connect the client to the server	(optional starting in v4.7)
@@ -106,6 +128,8 @@ async function run() {
             const result = await database.collection('users').updateOne(filter, update);
             res.send(result);
         })
+
+        //get user role--------------------------------------------------
         app.get('/users/admin/:email', varifyJwt, async (req, res) => {
             const email = req.params.email;
             const filter = { email: email }
@@ -124,13 +148,23 @@ async function run() {
             const result = { instructor: user?.role === 'instructor' }
             res.send(result)
         })
-        
-        app.get('/users', async (req,res)=>{
+        app.get('/users/students/:email', varifyJwt, async (req, res) => {
+            const email = req.params.email;
+            const filter = { email: email }
+            if (req.decoded.email != email)
+                return res.send({ student: false });
+            const user = await database.collection('users').findOne(filter);
+            const result = { student: user?.role === 'student' }
+            res.send(result)
+        })
+        //get all user--------------------------------------------------
+        app.get('/users', async (req, res) => {
             const result = await database.collection('users').find().toArray()
             res.send(result)
         })
-        app.get('/users/allinstructors', async (req,res)=>{
-            const filter ={role:'instructor'}
+
+        app.get('/users/allinstructors', async (req, res) => {
+            const filter = { role: 'instructor' }
             const result = await database.collection('users').find(filter).toArray()
             res.send(result)
         })
@@ -141,59 +175,91 @@ async function run() {
             const result = await database.collection('classes').insertOne(newclass);
             res.send(result);
         })
-       app.get ('/classes/:email', varifyJwt, varifyInstructor, async(req,res)=>{
-        const filter ={instructor_email : req.params.email}
-        const result = await database.collection('classes').find(filter).toArray();
-        res.send(result)
-       })
-       app.get('/classes', async(req,res)=>{
-        const result = await database.collection('classes').find().toArray();
-        res.send(result)
-       })
-       app.patch('/classes/approve/:id', varifyJwt, varifyAdmin, async (req, res) => {
-        const id = req.params.id;
-        const filter = { _id: new ObjectId(id) };
-        const update = {
-            $set: {
-                status: 'approved'
+        app.get('/classes/:email', varifyJwt, varifyInstructor, async (req, res) => {
+            const filter = { instructor_email: req.params.email }
+            const result = await database.collection('classes').find(filter).toArray();
+            res.send(result)
+        })
+        app.get('/classes', async (req, res) => {
+            const result = await database.collection('classes').find().toArray();
+            res.send(result)
+        })
+        app.get('/classes/filter/:id', async (req, res) => {
+            const id = req.params.id;
+            const filter = { _id: new ObjectId(id) }
+            const result = await database.collection('classes').findOne(filter);
+            res.send(result)
+        })
+        app.patch('/classes/approve/:id', varifyJwt, varifyAdmin, async (req, res) => {
+            const id = req.params.id;
+            const filter = { _id: new ObjectId(id) };
+            const update = {
+                $set: {
+                    status: 'approved'
 
+                }
             }
-        }
-        const result = await database.collection('classes').updateOne(filter, update);
-        res.send(result);
-       })
-       app.patch('/classes/deny/:id', varifyJwt, varifyAdmin, async (req, res) => {
-        const id = req.params.id;
-        const filter = { _id: new ObjectId(id) };
-        const update = {
-            $set: {
-                status: 'denied'
+            const result = await database.collection('classes').updateOne(filter, update);
+            res.send(result);
+        })
+        app.patch('/classes/deny/:id', varifyJwt, varifyAdmin, async (req, res) => {
+            const id = req.params.id;
+            const filter = { _id: new ObjectId(id) };
+            const update = {
+                $set: {
+                    status: 'denied'
 
+                }
             }
-        }
-        const result = await database.collection('classes').updateOne(filter, update);
-        res.send(result);
-       })
-       app.patch('/classes/feedback/:id', varifyJwt, varifyAdmin, async (req, res) => {
-        const id = req.params.id;
-        const feedback = req.body.feedback
-        const filter = { _id: new ObjectId(id) };
-        const update = {
-            $set: {
-                feedback: feedback
+            const result = await database.collection('classes').updateOne(filter, update);
+            res.send(result);
+        })
+        app.patch('/classes/feedback/:id', varifyJwt, varifyAdmin, async (req, res) => {
+            const id = req.params.id;
+            const feedback = req.body.feedback
+            const filter = { _id: new ObjectId(id) };
+            const update = {
+                $set: {
+                    feedback: feedback
+                }
             }
-        }
-        const result = await database.collection('classes').updateOne(filter, update);
-        res.send(result);
-       })
+            const result = await database.collection('classes').updateOne(filter, update);
+            res.send(result);
+        })
 
-       //Enrolemet apis
-       app.post('/classes/selected', varifyJwt,  async (req, res) => {
-        const selectedClass = req.body;
-        const result = await database.collection('selectedClasses').insertOne(selectedClass);
-        res.send(result);
-      })
-      
+        //Enrolemet apis
+        app.post('/classes/selected', varifyJwt, async (req, res) => {
+            const selectedClass = req.body;
+            const filter = { class_id: selectedClass.class_id, email: selectedClass.email };
+
+            // Check if a document with the same class_id and email already exists
+            const existingClass = await database.collection('selectedClasses').findOne(filter);
+            if (existingClass) {
+                return res.send({ selected: 1 });
+            }
+
+            const result = await database.collection('selectedClasses').insertOne(selectedClass);
+            res.send(result);
+        });
+        app.get('/classes/selected/:email',varifyJwt, async (req, res) => {
+            const email = req.params.email;
+            const filter = { email: email }
+            const result = await database.collection('selectedClasses').find(filter).toArray();
+            res.send(result)
+        })
+        app.get('/classes/filterbyid/:id',varifyJwt, async (req, res) => {
+            const id = req.params.id;
+            const filter = { _id: new ObjectId(id) }
+            const result = await database.collection('selectedClasses').findOne(filter);
+            res.send(result)
+        })
+        //remove from selected and add to enrolled
+        app.delete('/classes/remove-selected/:id',varifyJwt, async(req,res)=>{
+            const id = req.params.id;
+            const filter = { _id: new ObjectId(id) }
+            const result = await database.collection('selectedClasses').deleteOne(filter);
+            res.send(result)
+        })
 
         // Send a ping to confirm a successful connection
         await client.db("admin").command({ ping: 1 });
