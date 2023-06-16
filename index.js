@@ -45,8 +45,8 @@ const varifyJwt = (req, res, next) => {
 //srtipe payment intent api------------------------------
 app.post("/create-payment-intent", async (req, res) => {
     const { amount } = req.body;
-    if(!amount){
-        return res.send({errr:true})
+    if (!amount) {
+        return res.send({ errr: true })
     }
     // Create a PaymentIntent with the order amount and currency
     const paymentIntent = await stripe.paymentIntents.create({
@@ -92,6 +92,15 @@ async function run() {
             }
             next()
         }
+        const varifyStudent = async (req, res, next) => {
+            const email = req.decoded.email
+            const filter = { email: email };
+            const user = await database.collection('users').findOne(filter);
+            if (user?.role != 'student') {
+                return res.status(403).send({ error: true, message: 'forbidden access 2' });
+            }
+            next()
+        }
 
         //user apis---------------------------------------------------------------
         app.post('/users', async (req, res) => {
@@ -122,7 +131,7 @@ async function run() {
             const filter = { _id: new ObjectId(id) };
             const update = {
                 $set: {
-                    role: 'instructor'
+                    role: 'instructor',
                 }
             }
             const result = await database.collection('users').updateOne(filter, update);
@@ -157,6 +166,8 @@ async function run() {
             const result = { student: user?.role === 'student' }
             res.send(result)
         })
+
+
         //get all user--------------------------------------------------
         app.get('/users', async (req, res) => {
             const result = await database.collection('users').find().toArray()
@@ -181,9 +192,20 @@ async function run() {
             res.send(result)
         })
         app.get('/classes', async (req, res) => {
-            const result = await database.collection('classes').find().toArray();
-            res.send(result)
-        })
+            const limit = parseInt(req.query.limit);
+            console.log(limit);
+            try {
+              if (limit) {
+                const result = await database.collection('classes').find().sort({ enrolled: -1 }).limit(limit).toArray();
+                return res.send(result);
+              }
+              const result = await database.collection('classes').find().toArray();
+              res.send(result);
+            } catch (error) {
+              res.status(500).json({ error: 'An error occurred' });
+            }
+          });
+          
         app.get('/classes/filter/:id', async (req, res) => {
             const id = req.params.id;
             const filter = { _id: new ObjectId(id) }
@@ -228,7 +250,7 @@ async function run() {
         })
 
         //Enrolemet apis
-        app.post('/classes/selected', varifyJwt, async (req, res) => {
+        app.post('/classes/selected', varifyJwt, varifyStudent, async (req, res) => {
             const selectedClass = req.body;
             const filter = { class_id: selectedClass.class_id, email: selectedClass.email };
 
@@ -241,25 +263,63 @@ async function run() {
             const result = await database.collection('selectedClasses').insertOne(selectedClass);
             res.send(result);
         });
-        app.get('/classes/selected/:email',varifyJwt, async (req, res) => {
+        app.get('/classes/selected/:email', varifyJwt, varifyStudent, async (req, res) => {
             const email = req.params.email;
             const filter = { email: email }
             const result = await database.collection('selectedClasses').find(filter).toArray();
             res.send(result)
         })
-        app.get('/classes/filterbyid/:id',varifyJwt, async (req, res) => {
+        app.get('/classes/selected/filterbyid/:id', varifyJwt, varifyStudent, async (req, res) => {
             const id = req.params.id;
             const filter = { _id: new ObjectId(id) }
             const result = await database.collection('selectedClasses').findOne(filter);
             res.send(result)
         })
-        //remove from selected and add to enrolled
-        app.delete('/classes/remove-selected/:id',varifyJwt, async(req,res)=>{
+        //remove from selected add enrolled count and add to enrolled api
+        app.delete('/classes/remove-selected/:id', varifyJwt, varifyStudent, async (req, res) => {
             const id = req.params.id;
             const filter = { _id: new ObjectId(id) }
             const result = await database.collection('selectedClasses').deleteOne(filter);
             res.send(result)
         })
+
+        app.patch('/classes/add-enrollcount/:id', async (req, res) => {
+            const id = req.params.id;
+            if (!id) {
+                return res.send({ message: 'id not found for add-enrollment' })
+            }
+            const filter = { _id: new ObjectId(id) }
+            const { updatedSeats, updatedEnrolled } = req.body;
+            const updatedclass = {
+                $set: {
+                    seats: updatedSeats,
+                    enrolled: updatedEnrolled,
+                }
+            }
+            const result = await database.collection('classes').updateOne(filter, updatedclass);
+            res.send(result);
+        })
+        //add the paid class, selected to enrolled.
+        app.post('/classes/enrolled', varifyJwt, varifyStudent, async (req, res) => {
+            const paidClass = req.body;
+            const result = await database.collection('enrolledClasses').insertOne(paidClass);
+            res.send(result)
+        })
+        app.get('/classes/enrolled/:email', async (req, res) => {
+            const { email } = req.params;
+            const query = { email: email };
+            try {
+                const result = await database.collection('enrolledClasses')
+                    .find(query)
+                    .sort({ paymentDate: -1 })
+                    .toArray();
+                res.send(result);
+            } 
+            catch (error) {
+                res.status(500).json({ error: 'An error occurred' });
+            }
+        });
+
 
         // Send a ping to confirm a successful connection
         await client.db("admin").command({ ping: 1 });
